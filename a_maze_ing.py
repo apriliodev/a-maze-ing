@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import random
+import sys
+from parser import load_config
 
 # create the maze with cell and backtrack recursive
 
@@ -90,3 +92,113 @@ def create_maze(grid: Grid, start_x: int, start_y: int, rng: random.Random) -> N
             stack.pop()
 
 
+def find_shortest_path(grid: Grid, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
+    queue = [start]
+    visited = {start}
+    came_from = {}
+    while queue:
+        current = queue.pop(0)
+
+        if current == goal:
+            break
+        current_x, current_y = current
+        cell = grid.get_cell(current_x, current_y)
+        reachable = []
+        if not cell.north:
+            reachable.append((current_x, current_y - 1))
+        if not cell.south:
+            reachable.append((current_x, current_y + 1))
+        if not cell.east:
+            reachable.append((current_x + 1, current_y))
+        if not cell.west:
+            reachable.append((current_x - 1, current_y))
+
+        for neighbor in reachable:
+            if neighbor not in visited:
+                visited.add(neighbor)
+                came_from[neighbor] = current
+                queue.append(neighbor)
+
+    path = [goal]
+    while path[-1] != start:
+        path.append(came_from[path[-1]])
+
+    path.reverse()
+    return path
+
+
+def path_to_directions(path: list[tuple[int, int]]) -> str:
+    directions = ""
+    for i in range(len(path) - 1):
+        x1, y1 = path[i]
+        x2, y2 = path[i+1]
+        dx = x2 - x1
+        dy = y2 - y1
+
+        if dx == 1 and dy == 0:
+            directions += "E"
+        elif dx == -1 and dy == 0:
+            directions += "W" 
+        elif dx == 0 and dy == 1:
+            directions += "S"
+        elif dx == 0 and dy == -1:
+            directions += "N"
+
+    return directions
+
+def cell_to_hex(cell: Cell) -> str:
+    value = 0
+    value += int(cell.north) * 1
+    value += int(cell.east) * 2
+    value += int(cell.south) * 4
+    value += int(cell.west) * 8
+
+    return format(value, "X")
+
+def maze_to_hex(grid: Grid) -> str:
+    output = ""
+    for row in grid.cells:
+        line = ""
+        for cell in row:
+            line += cell_to_hex(cell)
+        output += line + "\n"
+    return output
+
+def write_output_file(
+    grid: Grid,
+    entry: tuple[int, int],
+    exit_pos: tuple[int, int],
+    path: list[tuple[int, int]],
+    output_path: str,
+) -> None:
+    maze_str = maze_to_hex(grid)
+    directions = path_to_directions(path)
+
+    entry_x, entry_y = entry
+    exit_x, exit_y = exit_pos
+
+    with open(output_path, "w") as f:
+        f.write(maze_str)
+        f.write("\n")
+        f.write(f"{entry_x},{entry_y}\n")
+        f.write(f"{exit_x},{exit_y}\n")
+        f.write(f"{directions}\n")
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        print("Usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
+        sys.exit(1)
+
+    config = load_config(sys.argv[1])
+
+    grid = Grid(config.width, config.height)
+    rng = random.Random(config.seed)
+
+    start_x, start_y = config.entry
+    create_maze(grid, start_x, start_y, rng)
+    path = find_shortest_path(grid, config.entry, config.exit)
+    write_output_file(grid, config.entry, config.exit, path, config.output_file)
+    print(f"Maze generated with seed={config.seed}")
+
+if __name__ == "__main__":
+    main()
