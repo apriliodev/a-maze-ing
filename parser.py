@@ -1,6 +1,7 @@
 import sys
-from pydantic import BaseModel, model_validator, field_validator, ValidationError
+from pydantic import BaseModel, model_validator, field_validator, ValidationError, Field
 from typing import Any
+import random
 
 
 def extract_config(path: str) -> dict[str, Any]:
@@ -27,6 +28,7 @@ class MazeConfig(BaseModel):
     exit: tuple[int, int]
     output_file: str
     perfect: bool = True
+    seed: int = Field(default_factory=lambda: random.randint(0, 2**32 - 1))
 
     @field_validator("entry", "exit", mode="before")
     @classmethod
@@ -72,15 +74,3 @@ def load_config(path: str) -> MazeConfig:
     except ValueError as e:
         print(f"Error: Invalid configuration syntax: {e}", file=sys.stderr)
         sys.exit(1)
-
-def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
-        sys.exit(1)
-
-    config = load_config(sys.argv[1])
-    print(config)
-
-
-if __name__ == "__main__":
-    main()
