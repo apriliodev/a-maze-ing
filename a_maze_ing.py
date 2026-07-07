@@ -1,9 +1,35 @@
 from dataclasses import dataclass
 import random
 import sys
-from parser import load_config
+from parser import load_config, MazeConfig
 
 # create the maze with cell and backtrack recursive
+import os
+
+if sys.platform in ('linux', 'darwin'):
+    CLEAR = 'clear'
+elif sys.platform == 'win32':
+    CLEAR = 'cls'
+else:
+    print('Plateforme non supportée', file=sys.stderr)
+    exit(1)
+
+
+def clear_term() -> None:
+    os.system(CLEAR)
+
+
+class Color:
+    def __init__(self) -> None:
+        self.index = 0
+        self.color = [15, 226, 46, 21, 208]
+
+    def current(self) -> int:
+        return self.color[self.index]
+
+    def next_color(self) -> None:
+        self.index = (self.index + 1) % len(self.color)
+
 
 
 @dataclass
@@ -29,6 +55,24 @@ class Grid:
 
     def get_cell(self, x: int, y: int):
         return self.cells[y][x]
+
+PATTERN_42 = [
+    "#...###",
+    "#.....#",
+    "###.###",
+    "..#.#..",
+    "..#.###"
+]
+def stamp_42_pattern(grid: Grid) -> bool:
+    if grid.width < 7 or grid.height < 5:
+        return False
+    offset_x = (grid.width - 7) // 2
+    offset_y = (grid.height - 5) // 2
+    pattern_cells: list[tuple[int, int]] = []
+    for row, line in enumerate(PATTERN_42):
+        for col, char in enumerate(line):
+            if char == "#":
+                pattern_cells.append((offset_x + col, offset_y + row))
 
 
 def remove_wall(grid: Grid, x1: int, y1: int, x2: int, y2: int) -> None:
@@ -202,10 +246,12 @@ def build_char_grid(grid: Grid) -> list[list[bool]]:
             chars[y][x] = True
     return chars
 
-def pixel_to_cell(row: int, col) -> tuple[int,int]:
+
+def pixel_to_cell(row: int, col) -> tuple[int, int]:
     y = (row - 1) // 2
     x = (col - 1) // 2
-    return x,y
+    return x, y
+
 
 def fill_wall(grid: Grid, chars: list[list[bool]]):
     for y in range(grid.height):
@@ -221,29 +267,39 @@ def fill_wall(grid: Grid, chars: list[list[bool]]):
                 chars[2 * y + 1][2 * x + 2] = True
 
 
-def floor_color(x: int, y: int, entry: tuple[int, int], exit_pos: tuple[int, int], short_path: list[tuple[int,int]], show_path: bool = False) -> int | None:
-    if (x,y) == entry:
-        return 201
-    elif (x,y) == exit_pos:
-        return 196
-    elif show_path:
-        if (x,y) in short_path:
-            return 51
-        else:
-            return None
-    else:
-        return None
-    
-def render(grid: Grid, chars, entry, exit_pos, show_path: bool = False):
+def path_pixels(path: list[tuple[int, int]]) -> set[tuple[int, int]]:
+    pixels: set[tuple[int, int]] = set()
+    for x, y in path:
+        pixels.add((2 * y + 1, 2 * x + 1))  # center of the cell
+    for i in range(len(path) - 1):
+        x1, y1 = path[i]
+        x2, y2 = path[i + 1]
+        row = y1 + y2 + 1
+        col = x1 + x2 + 1
+        pixels.add((row, col))  # the passage between the two cells
+    return pixels
+
+
+def render(grid: Grid, chars, entry, exit_pos, wall_color: Color, show_path: bool = False):
     shortest_path = find_shortest_path(grid, entry, exit_pos)
+    highlighted = path_pixels(shortest_path) if show_path else set()
+    color = wall_color.current()
+
     for row in range(len(chars)):
         row_pixels = []
         for col in range(len(chars[0])):
             if chars[row][col]:
-                pixel_text = "\033[48;5;15m  \033[0m"
+                pixel_text = f"\033[48;5;{color}m  \033[0m"
             else:
                 cell = pixel_to_cell(row, col)
-                code: int | None = floor_color(cell[0], cell[1], entry, exit_pos, shortest_path)
+                if cell == entry:
+                    code: int | None = 201
+                elif cell == exit_pos:
+                    code = 196
+                elif show_path and (row, col) in highlighted:
+                    code = 51
+                else:
+                    code = None
                 if code is None:
                     pixel_text = "  "
                 else:
@@ -252,34 +308,48 @@ def render(grid: Grid, chars, entry, exit_pos, show_path: bool = False):
         line = "".join(row_pixels)
         print(line)
 
-"""
-def main() -> None:
+
+def generate_maze(config: MazeConfig):
+
+    grid = Grid(config.width, config.height)
+    rng = random.Random(config.seed)
+    create_maze(grid, config.entry[0], config.entry[1], rng)
+    path = find_shortest_path(grid, config.entry, config.exit)
+    chars = build_char_grid(grid)
+    fill_wall(grid, chars)
+
+    return grid, chars, path
+
+
+if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
         sys.exit(1)
 
     config = load_config(sys.argv[1])
-
-    grid = Grid(config.width, config.height)
-    rng = random.Random(config.seed)
-
-    start_x, start_y = config.entry
-    create_maze(grid, start_x, start_y, rng)
-    path = find_shortest_path(grid, config.entry, config.exit)
+    grid, chars, path = generate_maze(config)
     write_output_file(grid, config.entry, config.exit,
                       path, config.output_file)
-    print(f"Maze generated with seed={config.seed}")
-"""
-if __name__ == "__main__":
-    rng = random.Random(1)
-    g = Grid(10, 10)
-    create_maze(g, 0, 0, rng)
-    chars = build_char_grid(g)
-    fill_wall(g, chars)
-    config = load_config("config.txt")
-
-    render(g, chars, config.entry, config.exit, True)
-"""
-if __name__ == "__main__":
-    main()
-"""
+    color = Color()
+    show_path = False
+    while True:
+        clear_term()
+        render(grid, chars, config.entry, config.exit, color, show_path)
+        print("\n=== A-Maze-ing ==="
+              "\n1. Re-generate a new maze"
+              "\n2. Show/Hide path from entry to exit"
+              "\n3. Rotate maze colors"
+              "\n4. Quit"
+              )
+        choice = input("Choice? (1-4): ")
+        if choice == "1":
+            config.seed = random.randint(0, 2**32 - 1)
+            grid, chars, path = generate_maze(config)
+        elif choice == "2":
+            show_path = not show_path
+        elif choice == "3":
+            color.next_color()
+        elif choice == "4":
+            break
+        else:
+            print("Choice not in list.")
