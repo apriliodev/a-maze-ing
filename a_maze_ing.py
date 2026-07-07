@@ -138,13 +138,14 @@ def path_to_directions(path: list[tuple[int, int]]) -> str:
         if dx == 1 and dy == 0:
             directions += "E"
         elif dx == -1 and dy == 0:
-            directions += "W" 
+            directions += "W"
         elif dx == 0 and dy == 1:
             directions += "S"
         elif dx == 0 and dy == -1:
             directions += "N"
 
     return directions
+
 
 def cell_to_hex(cell: Cell) -> str:
     value = 0
@@ -155,6 +156,7 @@ def cell_to_hex(cell: Cell) -> str:
 
     return format(value, "X")
 
+
 def maze_to_hex(grid: Grid) -> str:
     output = ""
     for row in grid.cells:
@@ -163,6 +165,7 @@ def maze_to_hex(grid: Grid) -> str:
             line += cell_to_hex(cell)
         output += line + "\n"
     return output
+
 
 def write_output_file(
     grid: Grid,
@@ -184,6 +187,72 @@ def write_output_file(
         f.write(f"{exit_x},{exit_y}\n")
         f.write(f"{directions}\n")
 
+
+def build_char_grid(grid: Grid) -> list[list[bool]]:
+    h = 2 * grid.height + 1
+    w = 2 * grid.width + 1
+    chars: list[list[bool]] = []
+    for y in range(h):
+        row: list[bool] = []
+        for x in range(w):
+            row.append(False)
+        chars.append(row)
+    for y in range(0, h, 2):
+        for x in range(0, w, 2):
+            chars[y][x] = True
+    return chars
+
+def pixel_to_cell(row: int, col) -> tuple[int,int]:
+    y = (row - 1) // 2
+    x = (col - 1) // 2
+    return x,y
+
+def fill_wall(grid: Grid, chars: list[list[bool]]):
+    for y in range(grid.height):
+        for x in range(grid.width):
+            cell = grid.get_cell(x, y)
+            if cell.north:
+                chars[2 * y][2 * x + 1] = True
+            if cell.west:
+                chars[2 * y + 1][2 * x] = True
+            if y == grid.height - 1 and cell.south:
+                chars[2 * y + 2][2 * x + 1] = True
+            if x == grid.width - 1 and cell.east:
+                chars[2 * y + 1][2 * x + 2] = True
+
+
+def floor_color(x: int, y: int, entry: tuple[int, int], exit_pos: tuple[int, int], short_path: list[tuple[int,int]], show_path: bool = False) -> int | None:
+    if (x,y) == entry:
+        return 201
+    elif (x,y) == exit_pos:
+        return 196
+    elif show_path:
+        if (x,y) in short_path:
+            return 51
+        else:
+            return None
+    else:
+        return None
+    
+def render(grid: Grid, chars, entry, exit_pos, show_path: bool = False):
+    shortest_path = find_shortest_path(grid, entry, exit_pos)
+    for row in range(len(chars)):
+        row_pixels = []
+        for col in range(len(chars[0])):
+            if chars[row][col]:
+                pixel_text = "\033[48;5;15m  \033[0m"
+            else:
+                cell = pixel_to_cell(row, col)
+                code: int | None = floor_color(cell[0], cell[1], entry, exit_pos, shortest_path)
+                if code is None:
+                    pixel_text = "  "
+                else:
+                    pixel_text = f"\033[48;5;{code}m  \033[0m"
+            row_pixels.append(pixel_text)
+        line = "".join(row_pixels)
+        print(line)
+
+"""
 def main() -> None:
     if len(sys.argv) != 2:
         print("Usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
@@ -197,8 +266,20 @@ def main() -> None:
     start_x, start_y = config.entry
     create_maze(grid, start_x, start_y, rng)
     path = find_shortest_path(grid, config.entry, config.exit)
-    write_output_file(grid, config.entry, config.exit, path, config.output_file)
+    write_output_file(grid, config.entry, config.exit,
+                      path, config.output_file)
     print(f"Maze generated with seed={config.seed}")
+"""
+if __name__ == "__main__":
+    rng = random.Random(1)
+    g = Grid(10, 10)
+    create_maze(g, 0, 0, rng)
+    chars = build_char_grid(g)
+    fill_wall(g, chars)
+    config = load_config("config.txt")
 
+    render(g, chars, config.entry, config.exit, True)
+"""
 if __name__ == "__main__":
     main()
+"""
