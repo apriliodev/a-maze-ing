@@ -31,7 +31,6 @@ class Color:
         self.index = (self.index + 1) % len(self.color)
 
 
-
 @dataclass
 class Cell:
     north: bool = True
@@ -56,6 +55,7 @@ class Grid:
     def get_cell(self, x: int, y: int):
         return self.cells[y][x]
 
+
 PATTERN_42 = [
     "#...###",
     "#.....#",
@@ -63,16 +63,31 @@ PATTERN_42 = [
     "..#.#..",
     "..#.###"
 ]
-def stamp_42_pattern(grid: Grid) -> bool:
-    if grid.width < 7 or grid.height < 5:
-        return False
-    offset_x = (grid.width - 7) // 2
-    offset_y = (grid.height - 5) // 2
-    pattern_cells: list[tuple[int, int]] = []
-    for row, line in enumerate(PATTERN_42):
-        for col, char in enumerate(line):
-            if char == "#":
-                pattern_cells.append((offset_x + col, offset_y + row))
+
+
+def stamp_42_pattern(
+    grid: Grid, entry: tuple[int, int], exit_pos: tuple[int, int],
+show_pattern: bool = False) -> list[tuple[int, int]]:
+    if show_pattern:
+        if grid.width < 7 or grid.height < 5:
+            print("Maze too small to display the '42' pattern.")
+            return []
+        offset_x = (grid.width - 7) // 2
+        offset_y = (grid.height - 5) // 2
+        pattern_cells: list[tuple[int, int]] = []
+        for row, line in enumerate(PATTERN_42):
+            for col, char in enumerate(line):
+                if char == "#":
+                    pattern_cells.append((offset_x + col, offset_y + row))
+        if entry in pattern_cells or exit_pos in pattern_cells:
+            print("Entry or exit overlaps the '42' pattern, skipping it.")
+            return []
+        for x, y in pattern_cells:
+            cell = grid.get_cell(x, y)
+            cell.visited = True
+        return pattern_cells
+    pattern_cells = []
+    return pattern_cells
 
 
 def remove_wall(grid: Grid, x1: int, y1: int, x2: int, y2: int) -> None:
@@ -280,7 +295,16 @@ def path_pixels(path: list[tuple[int, int]]) -> set[tuple[int, int]]:
     return pixels
 
 
-def render(grid: Grid, chars, entry, exit_pos, wall_color: Color, show_path: bool = False):
+def render(
+    grid: Grid,
+    chars,
+    entry,
+    exit_pos,
+    wall_color: Color,
+    pattern_cells: list[tuple[int, int]],
+    show_pattern: bool = False,
+    show_path: bool = False,
+):
     shortest_path = find_shortest_path(grid, entry, exit_pos)
     highlighted = path_pixels(shortest_path) if show_path else set()
     color = wall_color.current()
@@ -296,6 +320,8 @@ def render(grid: Grid, chars, entry, exit_pos, wall_color: Color, show_path: boo
                     code: int | None = 201
                 elif cell == exit_pos:
                     code = 196
+                elif show_pattern and cell in pattern_cells:
+                    code = 252
                 elif show_path and (row, col) in highlighted:
                     code = 51
                 else:
@@ -309,16 +335,17 @@ def render(grid: Grid, chars, entry, exit_pos, wall_color: Color, show_path: boo
         print(line)
 
 
-def generate_maze(config: MazeConfig):
+def generate_maze(config: MazeConfig, show_pattern: bool):
 
     grid = Grid(config.width, config.height)
     rng = random.Random(config.seed)
+    pattern_cells = stamp_42_pattern(grid, config.entry, config.exit, show_pattern)
     create_maze(grid, config.entry[0], config.entry[1], rng)
     path = find_shortest_path(grid, config.entry, config.exit)
     chars = build_char_grid(grid)
     fill_wall(grid, chars)
 
-    return grid, chars, path
+    return grid, chars, path, pattern_cells
 
 
 if __name__ == "__main__":
@@ -326,30 +353,37 @@ if __name__ == "__main__":
         print("Usage: python3 a_maze_ing.py config.txt", file=sys.stderr)
         sys.exit(1)
 
+    show_pattern = False
+    show_path = False
+
     config = load_config(sys.argv[1])
-    grid, chars, path = generate_maze(config)
+    grid, chars, path, pattern_cells = generate_maze(config, show_pattern)
     write_output_file(grid, config.entry, config.exit,
                       path, config.output_file)
     color = Color()
-    show_path = False
     while True:
         clear_term()
-        render(grid, chars, config.entry, config.exit, color, show_path)
+        render(grid, chars, config.entry, config.exit, color, pattern_cells, show_pattern, show_path)
         print("\n=== A-Maze-ing ==="
               "\n1. Re-generate a new maze"
               "\n2. Show/Hide path from entry to exit"
               "\n3. Rotate maze colors"
-              "\n4. Quit"
+              "\n4. Show 42 pattern"
+              "\n5. Quit"
               )
         choice = input("Choice? (1-4): ")
         if choice == "1":
             config.seed = random.randint(0, 2**32 - 1)
-            grid, chars, path = generate_maze(config)
+            grid, chars, path, pattern_cells = generate_maze(config, show_pattern)
         elif choice == "2":
             show_path = not show_path
         elif choice == "3":
             color.next_color()
         elif choice == "4":
+            show_pattern = not show_pattern
+            config.seed = random.randint(0, 2**32 - 1)
+            grid, chars, path, pattern_cells = generate_maze(config, show_pattern)
+        elif choice == "5":
             break
         else:
             print("Choice not in list.")
