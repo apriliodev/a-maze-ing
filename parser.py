@@ -34,7 +34,7 @@ class MazeConfig(BaseModel):
     @classmethod
     def parse_coordinates(cls, value: str) -> tuple[int, int]:
         x_str, y_str = value.split(",")
-        return (int(x_str), int(y_str)) 
+        return (int(x_str), int(y_str))
 
     @field_validator("width", "height")
     @classmethod

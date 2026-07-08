@@ -66,8 +66,8 @@ PATTERN_42 = [
 
 
 def stamp_42_pattern(
-    grid: Grid, entry: tuple[int, int], exit_pos: tuple[int, int],
-show_pattern: bool = False) -> list[tuple[int, int]]:
+        grid: Grid, entry: tuple[int, int], exit_pos: tuple[int, int],
+        show_pattern: bool = False) -> list[tuple[int, int]]:
     if show_pattern:
         if grid.width < 7 or grid.height < 5:
             print("Maze too small to display the '42' pattern.")
@@ -126,6 +126,18 @@ def get_neighbors(grid: Grid, x: int, y: int) -> list[tuple[int, int]]:
             neighbors.append((nx, ny))
 
     return neighbors
+
+
+def random_remove(grid: Grid, rng: random.Random, percent: float, pattern_cells: list[tuple[int, int]]) -> None:
+    attempts: int = int(percent * (grid.width * grid.height))
+    for i in range(attempts):
+        x = rng.randint(0, grid.width - 1)
+        y = rng.randint(0, grid.height - 1)
+        valid_cells = get_neighbors(grid, x, y)
+        nx, ny = rng.choice(valid_cells)
+        if (x, y) in pattern_cells or (nx, ny) in pattern_cells:
+            continue
+        remove_wall(grid, x, y, nx, ny)
 
 
 def create_maze(grid: Grid, start_x: int, start_y: int, rng: random.Random) -> None:
@@ -339,13 +351,27 @@ def generate_maze(config: MazeConfig, show_pattern: bool):
 
     grid = Grid(config.width, config.height)
     rng = random.Random(config.seed)
-    pattern_cells = stamp_42_pattern(grid, config.entry, config.exit, show_pattern)
+    pattern_cells = stamp_42_pattern(
+        grid, config.entry, config.exit, show_pattern)
     create_maze(grid, config.entry[0], config.entry[1], rng)
+    if config.perfect == False:
+        random_remove(grid, rng, 0.4, pattern_cells)
     path = find_shortest_path(grid, config.entry, config.exit)
     chars = build_char_grid(grid)
     fill_wall(grid, chars)
 
     return grid, chars, path, pattern_cells
+
+
+def print_config(config: MazeConfig) -> None:
+    print("=== User Config ===\n")
+    print(f"Width : {config.width}")
+    print(f"Height: {config.height}")
+    print(f"Entry: {config.entry}")
+    print(f"Exit: {config.exit}")
+    print(f"Output File: {config.output_file}")
+    print(f"Perfect ?: {config.perfect}")
+    print(f"Seed: {config.seed}")
 
 
 if __name__ == "__main__":
@@ -355,6 +381,7 @@ if __name__ == "__main__":
 
     show_pattern = False
     show_path = False
+    show_config = False
 
     config = load_config(sys.argv[1])
     grid, chars, path, pattern_cells = generate_maze(config, show_pattern)
@@ -363,27 +390,42 @@ if __name__ == "__main__":
     color = Color()
     while True:
         clear_term()
-        render(grid, chars, config.entry, config.exit, color, pattern_cells, show_pattern, show_path)
+        render(grid, chars, config.entry, config.exit,
+               color, pattern_cells, show_pattern, show_path)
+        if show_config:
+            print()
+            print_config(config)
+
         print("\n=== A-Maze-ing ==="
               "\n1. Re-generate a new maze"
               "\n2. Show/Hide path from entry to exit"
               "\n3. Rotate maze colors"
               "\n4. Show 42 pattern"
-              "\n5. Quit"
+              "\n5. ON/OFF Perfect maze"
+              "\n6. Show config"
+              "\n7. Quit"
               )
-        choice = input("Choice? (1-4): ")
+        choice = input("Choice? (1-7): ")
         if choice == "1":
             config.seed = random.randint(0, 2**32 - 1)
-            grid, chars, path, pattern_cells = generate_maze(config, show_pattern)
+            grid, chars, path, pattern_cells = generate_maze(
+                config, show_pattern)
         elif choice == "2":
             show_path = not show_path
         elif choice == "3":
             color.next_color()
         elif choice == "4":
             show_pattern = not show_pattern
-            config.seed = random.randint(0, 2**32 - 1)
-            grid, chars, path, pattern_cells = generate_maze(config, show_pattern)
+            # config.seed = random.randint(0, 2**32 - 1)
+            grid, chars, path, pattern_cells = generate_maze(
+                config, show_pattern)
         elif choice == "5":
+            config.perfect = not config.perfect
+            grid, chars, path, pattern_cells = generate_maze(
+                config, show_pattern)
+        elif choice == "6":
+            show_config = not show_config
+        elif choice == "7":
             break
         else:
             print("Choice not in list.")
